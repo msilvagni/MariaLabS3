@@ -1,0 +1,31 @@
+---
+title: "index.qmd"
+author: "Maria Silvagni"
+format:
+  html:
+    toc: true
+    toc_float: true
+    embed-resources: true
+execute: 
+  warning: false
+  message: false
+---
+
+```{r}
+system("git --version")
+```
+
+# About me
+
+Hi! My name is Maria Silvagni. I am a senior at UMass and I am learning data science with R and Quarto.
+
+# Photo
+
+```{r}
+knitr::include_graphics("Goldenretriever.jpg")
+
+```
+
+# Lab 7 Link
+
+[Lab 7](Lab7.html)
