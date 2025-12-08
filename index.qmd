@@ -3,6 +3,7 @@ title: "index.qmd"
 author: "Maria Silvagni"
 format:
   html:
+    theme: sandstone
     toc: true
     toc_float: true
     embed-resources: true
@@ -11,9 +12,9 @@ execute:
   message: false
 ---
 
-```{r}
-system("git --version")
-```
+[Lab13.html](Lab13.html)
+
+
 
 # About me
 
