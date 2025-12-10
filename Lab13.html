@@ -3088,9 +3088,10 @@ vertical-align: -.125em;
     <h2 id="toc-title">Table of contents</h2>
    
   <ul>
-  <li><a href="#comprehensive-microbial-co-occurrence-and-network-analysis" id="toc-comprehensive-microbial-co-occurrence-and-network-analysis" class="nav-link active" data-scroll-target="#comprehensive-microbial-co-occurrence-and-network-analysis">Comprehensive Microbial Co-occurrence and Network Analysis</a></li>
-  <li><a href="#comprehensive-community-composition-diversity-analysis-of-neon-mags-by-siteid" id="toc-comprehensive-community-composition-diversity-analysis-of-neon-mags-by-siteid" class="nav-link" data-scroll-target="#comprehensive-community-composition-diversity-analysis-of-neon-mags-by-siteid">Comprehensive Community Composition &amp; Diversity Analysis of NEON MAGs by SiteID</a>
+  <li><a href="#analysis-of-the-neon-soilmags-soilchem-data" id="toc-analysis-of-the-neon-soilmags-soilchem-data" class="nav-link active" data-scroll-target="#analysis-of-the-neon-soilmags-soilchem-data">Analysis of the NEON soilMAGs soilChem Data</a>
   <ul class="collapse">
+  <li><a href="#comprehensive-microbial-co-occurrence-and-network-analysis" id="toc-comprehensive-microbial-co-occurrence-and-network-analysis" class="nav-link" data-scroll-target="#comprehensive-microbial-co-occurrence-and-network-analysis">Comprehensive Microbial Co-occurrence and Network Analysis</a></li>
+  <li><a href="#comprehensive-community-composition-diversity-analysis-of-neon-mags-by-siteid" id="toc-comprehensive-community-composition-diversity-analysis-of-neon-mags-by-siteid" class="nav-link" data-scroll-target="#comprehensive-community-composition-diversity-analysis-of-neon-mags-by-siteid">Comprehensive Community Composition &amp; Diversity Analysis of NEON MAGs by SiteID</a></li>
   <li><a href="#relationship-between-ph-in-water-vs-cacl2" id="toc-relationship-between-ph-in-water-vs-cacl2" class="nav-link" data-scroll-target="#relationship-between-ph-in-water-vs-cacl2">Relationship between pH in water vs CaCl2</a></li>
   <li><a href="#sample-type-contrasts-o-vs-m-ph-moisture-temperature" id="toc-sample-type-contrasts-o-vs-m-ph-moisture-temperature" class="nav-link" data-scroll-target="#sample-type-contrasts-o-vs-m-ph-moisture-temperature">Sample-type contrasts (O vs M): pH, moisture, temperature</a></li>
   <li><a href="#elevation-gradients-temperature-moisture-and-ph" id="toc-elevation-gradients-temperature-moisture-and-ph" class="nav-link" data-scroll-target="#elevation-gradients-temperature-moisture-and-ph">Elevation gradients: Temperature, Moisture, and pH</a></li>
@@ -3131,8 +3132,10 @@ vertical-align: -.125em;
 </header>
 
 
-<section id="comprehensive-microbial-co-occurrence-and-network-analysis" class="level1">
-<h1>Comprehensive Microbial Co-occurrence and Network Analysis</h1>
+<section id="analysis-of-the-neon-soilmags-soilchem-data" class="level1">
+<h1>Analysis of the NEON soilMAGs soilChem Data</h1>
+<section id="comprehensive-microbial-co-occurrence-and-network-analysis" class="level2">
+<h2 class="anchored" data-anchor-id="comprehensive-microbial-co-occurrence-and-network-analysis">Comprehensive Microbial Co-occurrence and Network Analysis</h2>
 <div class="cell">
 <div class="sourceCode cell-code" id="cb1"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(tidyverse)</span>
 <span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(igraph)</span>
@@ -3557,9 +3560,10 @@ $ type                  &lt;chr&gt; &quot;Soil&quot;, &quot;Soil&quot;, &quot;So
 </div>
 </div>
 </section>
-<section id="comprehensive-community-composition-diversity-analysis-of-neon-mags-by-siteid" class="level1">
-<h1>Comprehensive Community Composition &amp; Diversity Analysis of NEON MAGs by SiteID</h1>
-<p>For my lab, I mainly focused on community/ environmental correlations and community composition &amp; diversity. With the help of Co-pilot, I made some really interesting plots! ## Cross-site environmental ranges</p>
+<section id="comprehensive-community-composition-diversity-analysis-of-neon-mags-by-siteid" class="level2">
+<h2 class="anchored" data-anchor-id="comprehensive-community-composition-diversity-analysis-of-neon-mags-by-siteid">Comprehensive Community Composition &amp; Diversity Analysis of NEON MAGs by SiteID</h2>
+<p>For my lab, I mainly focused on community/ environmental correlations and community composition &amp; diversity. With the help of Co-pilot, I made some really interesting plots!</p>
+<p>Cross-site environmental ranges</p>
 <div class="cell">
 <div class="sourceCode cell-code" id="cb11"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a>site_summary <span class="ot">&lt;-</span> soil_env <span class="sc">%&gt;%</span></span>
 <span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">group_by</span>(site_ID) <span class="sc">%&gt;%</span></span>
@@ -3590,6 +3594,7 @@ $ type                  &lt;chr&gt; &quot;Soil&quot;, &quot;Soil&quot;, &quot;So
 </div>
 </div>
 <p>This summarizes how elevation, temperature, moisture, and pH vary across NEON sites. Sites like NIWO/TOOL/YELL have high elevation and cooler soils. SRER/ONAQ/CLBJ show warmer, usually drier conditions. I expect moisture and pH gradients to be effected by climate.</p>
+</section>
 <section id="relationship-between-ph-in-water-vs-cacl2" class="level2">
 <h2 class="anchored" data-anchor-id="relationship-between-ph-in-water-vs-cacl2">Relationship between pH in water vs CaCl2</h2>
 <div class="cell">

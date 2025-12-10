@@ -10,8 +10,8 @@ execute:
   warning: false
   message: false
 ---
-
-# Comprehensive Microbial Co-occurrence and Network Analysis
+# Analysis of the NEON soilMAGs soilChem Data
+## Comprehensive Microbial Co-occurrence and Network Analysis
 
 ```{r}
 library(tidyverse)
@@ -89,10 +89,11 @@ soil_env %>%
 
 ```
 
-# Comprehensive Community Composition & Diversity Analysis of NEON MAGs by SiteID
+## Comprehensive Community Composition & Diversity Analysis of NEON MAGs by SiteID
 
-For my lab, I mainly focused on community/ environmental correlations and community composition & diversity. With the help of Co-pilot, I made some really interesting plots! \## Cross-site environmental ranges
+For my lab, I mainly focused on community/ environmental correlations and community composition & diversity. With the help of Co-pilot, I made some really interesting plots! 
 
+Cross-site environmental ranges
 ```{r}
 site_summary <- soil_env %>%
   group_by(site_ID) %>%
