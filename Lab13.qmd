@@ -11,13 +11,7 @@ execute:
   message: false
 ---
 
-# **Comprehensive Microbial Co-occurrence and Network Analysis**
-
-# Exercises
-
-## 1. Start by saving a .qmd file for Lab 13 to the folder that represents your GitHub directory. From your index.qmd file create a link to the rendered html version of Lab 13. Push these changes to your GitHub repository and make sure you can see the linked version of Lab 13.
-
-## 2. Upload to co-pilot the `NEON_soilMAGs_soilChem.csv` file. Then ask for suggestions in the types of analysis you can do or create a prompt using one of the four categories above.
+# Comprehensive Microbial Co-occurrence and Network Analysis
 
 ```{r}
 library(tidyverse)
@@ -36,477 +30,281 @@ url <- "https://github.com/jeffreyblanchard/PathoGen2025/raw/main/labs/NEON_soil
 soil_data <- read_csv(url)
 ```
 
-```{r}
-head(soil_data)
+```{r setup, include=FALSE}
+library(tidyverse)
+library(janitor)
+
+# Read in your CSV (adjust filename/path if needed)
+soilMAGs <- read_csv("NEON_soilMAGs_soilChem.csv") |>
+  clean_names()
+
+# Quick check
+glimpse(soilMAGs)
 ```
 
-# Looking at the Location of the Sampling
+```{r}
+glimpse(soilMAGs)
+```
 
 ```{r}
-# Load packages for mapping
+glimpse(soil_data)
+```
+
+```{r}
 library(tidyverse)
-library(ggplot2)
-library(sf)        # spatial data handling
-library(leaflet)   # interactive maps
+library(janitor)
+library(skimr)
+library(patchwork)
+library(ggrepel)
 
-# Read in your dataset
-mags <- read_csv("../NEON_soilMAGs_soilChem.csv")
 
-# Keep only location-related columns
-locations <- mags %>%
-  select(genomicsSampleID, siteID, decimalLatitude, decimalLongitude, elevation) %>%
-  distinct()
 
-# Convert to spatial object
-locations_sf <- st_as_sf(locations,
-                         coords = c("decimalLongitude", "decimalLatitude"),
-                         crs = 4326)  # WGS84 coordinate system
+# Select only columns we’ll analyze (drop big NA genomics fields)
+soil_env <- soil_data %>%
+  select(genomicsSampleID, site_ID, decimalLatitude, decimalLongitude,
+         elevation, soilTemp, soilMoisture, soilInWaterpH = soilInWaterpH,
+         soilInCaClpH = soilInCaClpH)
 
-# Quick static plot
-ggplot(locations_sf) +
-  geom_sf(aes(color = siteID), size = 3) +
-  theme_minimal() +
-  labs(title = "NEON MAG Sampling Locations",
-       color = "Site ID")
-
-# Interactive map
-leaflet(locations_sf) %>%
-  addTiles() %>%
-  addCircleMarkers(~st_coordinates(locations_sf)[,1],
-                   ~st_coordinates(locations_sf)[,2],
-                   popup = ~paste("Sample:", genomicsSampleID,
-                                  "<br>Site:", siteID,
-                                  "<br>Elevation:", elevation))
+# Parse metadata: sample type inferred from ID suffix: "-M-" vs "-O-"
+soil_env <- soil_env %>%
+  mutate(sample_type = case_when(
+    str_detect(genomicsSampleID, "-M-") ~ "M",  # mineral horizon
+    str_detect(genomicsSampleID, "-O-") ~ "O",  # organic horizon
+    TRUE ~ "unknown"
+  )) %>%
+  mutate(site_iD = factor(site_ID),
+         sample_type = factor(sample_type, levels = c("M","O","unknown")))
 
 ```
 
--   Above is both a static and interactive graph that shows the geographic coordinates (latitude, longitude, elevation) for each sample, so we can explore the locations of data collection across NEON sites.
+```{r}
+# Summary skim
+skim(soil_env)
 
--   I'd say the samples found are pretty spread out across most US states as well as DR and Alaska.
+# Missingness by variable
+soil_env %>%
+  summarize(across(everything(), ~sum(is.na(.)))) %>%
+  pivot_longer(everything(), names_to = "variable", values_to = "n_missing") %>%
+  arrange(desc(n_missing))
 
-# Looking at the Location of soil pH and Temperature in All Samples
+```
+
+# Comprehensive Community Composition & Diversity Analysis of NEON MAGs by SiteID
+
+For my lab, I mainly focused on community/ environmental correlations and community composition & diversity. With the help of Co-pilot, I made some really interesting plots! \## Cross-site environmental ranges
 
 ```{r}
-# Load libraries
-library(tidyverse)
-library(sf)
-library(leaflet)
-library(ggplot2)
+site_summary <- soil_env %>%
+  group_by(site_ID) %>%
+  summarize(n = n(),
+            elev_mean = mean(elevation, na.rm = TRUE),
+            temp_mean = mean(soilTemp, na.rm = TRUE),
+            moist_mean = mean(soilMoisture, na.rm = TRUE),
+            phw_mean = mean(soilInWaterpH, na.rm = TRUE),
+            phc_mean = mean(soilInCaClpH, na.rm = TRUE)) %>%
+  arrange(desc(elev_mean))
 
-# Read dataset
-mags <- read_csv("../NEON_soilMAGs_soilChem.csv")
+site_summary
 
-# Prepare location + environmental data
-locations <- mags %>%
-  select(genomicsSampleID, siteID, decimalLatitude, decimalLongitude,
-         elevation, soilTemp, soilMoisture, soilInWaterpH, soilInCaClpH) %>%
-  distinct()
+```
 
-# Convert to spatial object
-locations_sf <- st_as_sf(locations,
-                         coords = c("decimalLongitude", "decimalLatitude"),
-                         crs = 4326)
+This summarizes how elevation, temperature, moisture, and pH vary across NEON sites. Sites like NIWO/TOOL/YELL have high elevation and cooler soils. SRER/ONAQ/CLBJ show warmer, usually drier conditions. I expect moisture and pH gradients to be effected by climate.
 
-# Static map with soil temperature gradient
-ggplot(locations_sf) +
-  geom_sf(aes(color = soilTemp, size = soilMoisture)) +
+## Relationship between pH in water vs CaCl2
+
+```{r}
+p_ph <- soil_env %>%
+  ggplot(aes(soilInWaterpH, soilInCaClpH, color = site_ID)) +
+  geom_point(alpha = 0.7) +
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed") +
+  labs(x = "pH (water)", y = "pH (CaCl2)",
+       title = "pH in water vs pH in CaCl2 across NEON sites") +
+  theme_bw()
+
+p_ph
+
+# Fit regression
+lm_ph <- lm(soilInCaClpH ~ soilInWaterpH, data = soil_env)
+summary(lm_ph)
+
+```
+
+This shows CaCl₂ pH and water pH levels and their correlation (in this case strongly).CaCl2 pH is usually lower than water pH (points below 1:1 line), whcih reflects ionic strength effects. The regression slope, is close to 1 and indicates a consistent pattern. I think the site-specific minerals/organic matter cause this shift.
+
+## Sample-type contrasts (O vs M): pH, moisture, temperature
+
+```{r}
+soil_long <- soil_env %>%
+  pivot_longer(cols = c(soilTemp, soilMoisture, soilInWaterpH, soilInCaClpH),
+               names_to = "variable", values_to = "value")
+
+p_type <- soil_long %>%
+  filter(sample_type != "unknown") %>%
+  ggplot(aes(sample_type, value, fill = sample_type)) +
+  geom_violin(trim = TRUE, alpha = 0.6) +
+  geom_boxplot(width = 0.15, outlier.shape = NA) +
+  facet_wrap(~variable, scales = "free_y") +
+  scale_fill_brewer(palette = "Dark2") +
+  labs(title = "Organic vs mineral horizons across variables",
+       x = "Sample type", y = "Value") +
+  theme_bw()
+
+p_type
+
+```
+
+This shows the organic horizons versus mineral horizons and how their environmental factors are different. Here, you can see that the organic horizons (O) should be moister and more acidic (lower pH) than mineral (M). If O samples were taken from the forest floor, I would think temperature would be lower. This figure displays the differences visible across sites due to th horizons.
+
+## Elevation gradients: Temperature, Moisture, and pH
+
+```{r}
+p_elev_temp <- ggplot(soil_env, aes(elevation, soilTemp, color = site_ID)) +
+  geom_point() + geom_smooth(method = "lm", se = FALSE) +
+  labs(x = "Elevation (m)", y = "Soil temperature (°C)",
+       title = "Elevation vs soil temperature") + theme_bw()
+
+p_elev_moist <- ggplot(soil_env, aes(elevation, soilMoisture, color = site_ID)) +
+  geom_point() + geom_smooth(method = "lm", se = FALSE) +
+  labs(x = "Elevation (m)", y = "Volumetric moisture",
+       title = "Elevation vs soil moisture") + theme_bw()
+
+p_elev_ph <- ggplot(soil_env, aes(elevation, soilInWaterpH, color = site_ID)) +
+  geom_point() + geom_smooth(method = "lm", se = FALSE) +
+  labs(x = "Elevation (m)", y = "pH (water)",
+       title = "Elevation vs soil pH") + theme_bw()
+
+p_elev_temp / p_elev_moist / p_elev_ph
+
+```
+
+This shows the characteristic differences at different elevations. I concluded that temperature declines as elevation increases. Moisture vs elevation can change depending on the region (ex. alpine sites may be moist or dry). pH is often lower at high elevations.
+
+## Temperature–moisture coupling across climate regimes
+
+```{r}
+p_tm <- ggplot(soil_env, aes(soilTemp, soilMoisture, color = site_ID)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE) +
+  labs(x = "Soil temperature (°C)", y = "Volumetric moisture",
+       title = "Temperature–moisture relationship varies by site") +
+  theme_bw()
+
+p_tm
+```
+
+This highlights the soil temperature and how they differ depedning on the site. My ecological interpretation of this graph is that in grasslands (SRER, ONAQ), there is often warmer soils and drier conditions (shown by the negative slope). In other types of forests (HARV, UNDE), this coupling/ relationship may be weak or even positive depending on sampling time and location.
+
+## Spatial visualization: latitude–longitude colored by pH
+
+```{r}
+p_map <- ggplot(soil_env, aes(decimalLongitude, decimalLatitude, color = soilInWaterpH)) +
+  geom_point(size = 2) +
   scale_color_viridis_c(option = "plasma") +
-  labs(title = "Sampling Locations Colored by Soil Temperature",
-       color = "Soil Temp (°C)", size = "Soil Moisture") +
-  theme_minimal()
+  coord_quickmap() +
+  labs(x = "Longitude", y = "Latitude", color = "pH (water)",
+       title = "Spatial pattern of soil pH across NEON sites") +
+  theme_bw()
 
-# Interactive map with popups showing environmental data
-leaflet(locations_sf) %>%
-  addTiles() %>%
-  addCircleMarkers(
-    radius = ~soilMoisture * 10,   # bubble size by moisture
-    color = ~colorNumeric("viridis", soilTemp)(soilTemp),
-    popup = ~paste0("<b>Sample:</b> ", genomicsSampleID,
-                    "<br><b>Site:</b> ", siteID,
-                    "<br><b>Elevation:</b> ", elevation, " m",
-                    "<br><b>Soil Temp:</b> ", round(soilTemp, 2), " °C",
-                    "<br><b>Moisture:</b> ", round(soilMoisture, 3),
-                    "<br><b>pH (H2O):</b> ", round(soilInWaterpH, 2),
-                    "<br><b>pH (CaCl2):</b> ", round(soilInCaClpH, 2))
-  ) %>%
-  addLegend("bottomright", pal = colorNumeric("viridis", locations$soilTemp),
-            values = locations$soilTemp, title = "Soil Temp (°C)")
+p_map
 
 ```
 
--   Above shows two graphs, one interactive and one static. The interactive graph shows clickable popups showing sample ID, site, elevation, soil temperature, moisture, and pH. The buble size correlates with the soil moisture and teh bubble color correlates to the oil temeprature. The static graph has points that are colored by soil temperature and points that are size scaled by soil moisture.
+This map shows the soil pH across latitude and longitude, and highlights biogeographic chemistry patterns.The Western (drier) sites can show higher pH, whereas in humid, organic-rich forests often have a lower pH. The map helps show the relationship between location and chemistry patterns.
+
+## Site-level effect sizes: O vs M differences
 
 ```{r}
-# Load libraries
-library(tidyverse)
-library(sf)
-library(ggplot2)
-library(leaflet)
+type_diff <- soil_env %>%
+  filter(sample_type %in% c("M","O")) %>%
+  group_by(site_ID, sample_type) %>%
+  summarize(across(c(soilTemp, soilMoisture, soilInWaterpH, soilInCaClpH),
+                   ~mean(.x, na.rm = TRUE)), .groups = "drop") %>%
+  pivot_wider(names_from = sample_type, values_from = c(soilTemp, soilMoisture, soilInWaterpH, soilInCaClpH)) %>%
+  mutate(d_temp = soilTemp_O - soilTemp_M,
+         d_moist = soilMoisture_O - soilMoisture_M,
+         d_phw = soilInWaterpH_O - soilInWaterpH_M,
+         d_phc = soilInCaClpH_O - soilInCaClpH_M)
 
-# Read dataset
-mags <- read_csv("../NEON_soilMAGs_soilChem.csv")
-
-# Prepare location + pH data
-locations <- mags %>%
-  select(genomicsSampleID, siteID, decimalLatitude, decimalLongitude,
-         soilInWaterpH, soilInCaClpH) %>%
-  distinct()
-
-# Convert to spatial object
-locations_sf <- st_as_sf(locations,
-                         coords = c("decimalLongitude", "decimalLatitude"),
-                         crs = 4326)
-
-# Static map: pH in water
-ggplot(locations_sf) +
-  geom_sf(aes(color = soilInWaterpH), size = 3) +
-  scale_color_viridis_c(option = "plasma") +
-  labs(title = "Soil pH (H2O) Across NEON Sites",
-       color = "pH (H2O)") +
-  theme_minimal()
-
-# Interactive map with both pH values
-leaflet(locations_sf) %>%
-  addTiles() %>%
-  addCircleMarkers(
-    radius = 6,
-    color = ~colorNumeric("viridis", soilInWaterpH)(soilInWaterpH),
-    popup = ~paste0("<b>Sample:</b> ", genomicsSampleID,
-                    "<br><b>Site:</b> ", siteID,
-                    "<br><b>pH (H2O):</b> ", round(soilInWaterpH, 2),
-                    "<br><b>pH (CaCl2):</b> ", round(soilInCaClpH, 2))
-  ) %>%
-  addLegend("bottomright", pal = colorNumeric("viridis", locations$soilInWaterpH),
-            values = locations$soilInWaterpH, title = "Soil pH (H2O)")
-
+type_diff
 
 ```
 
--   Here, we see an interactive graph and a static graph that display the soil pH's color coded, and we can see how they differ depending on the state. For example, we see that the soil pH's found in Arizona are mch higher, in the 6-8 range, compared to Massachusetts which was above the 4 to 5 range.
+This, in numbers, shows how the moisture and pH differs when we compare organic horizons to mineral horizons at each site. Negative d_ph shows that the horizons are usually acidic. Positive d_moist shows that none of the horizons are wetter. Overall, this shows a table of the surfaces at specific sites' magnitudes (ex. strongest horizon contrast at UNDE/HARV vs it being weaker at grasslands).
 
-# Soil Characteristics in Colorado
-
--   I was interested in seeing the data in a specific state. I randomly chose Colorado and found some pretty cool results!
+## Pairwise relationships and multicollinearity
 
 ```{r}
-# Load libraries
-library(tidyverse)
-library(sf)
-library(ggplot2)
-library(leaflet)
+soil_vars <- soil_env %>%
+  select(soilTemp, soilMoisture, soilInWaterpH, soilInCaClpH, elevation) %>%
+  drop_na()
 
-# Read dataset
-mags <- read_csv("../NEON_soilMAGs_soilChem.csv")
+soil_pairs <- soil_env %>%
+  select(soilTemp, soilMoisture, soilInWaterpH, soilInCaClpH, elevation) %>%
+  drop_na()
 
-# Filter for Colorado site (CPER)
-colorado <- mags %>%
-  filter(siteID == "CPER") %>%
-  select(genomicsSampleID, siteID, decimalLatitude, decimalLongitude,
-         soilInWaterpH, soilInCaClpH, elevation) %>%
-  distinct()
+# 1. Scatterplot matrix (base R)
+pairs(soil_vars,
+      main = "Pairwise scatterplots of soil variables",
+      pch = 19, col = "steelblue")
 
-# Convert to spatial object
-colorado_sf <- st_as_sf(colorado,
-                        coords = c("decimalLongitude", "decimalLatitude"),
-                        crs = 4326)
+# 2. Correlation matrix
+cor_matrix <- cor(soil_vars, use = "complete.obs")
+print(cor_matrix)
 
-# Static map: soil pH (H2O)
-ggplot(colorado_sf) +
-  geom_sf(aes(color = soilInWaterpH), size = 3) +
-  scale_color_viridis_c(option = "plasma") +
-  labs(title = "Soil pH (H2O) at CPER, Colorado",
-       color = "pH (H2O)") +
-  theme_minimal()
 
-# Interactive map with popups
-leaflet(colorado_sf) %>%
-  addTiles() %>%
-  addCircleMarkers(
-    radius = 6,
-    color = ~colorNumeric("viridis", soilInWaterpH)(soilInWaterpH),
-    popup = ~paste0("<b>Sample:</b> ", genomicsSampleID,
-                    "<br><b>Site:</b> ", siteID,
-                    "<br><b>Elevation:</b> ", elevation, " m",
-                    "<br><b>pH (H2O):</b> ", round(soilInWaterpH, 2),
-                    "<br><b>pH (CaCl2):</b> ", round(soilInCaClpH, 2))
-  ) %>%
-  addLegend("bottomright", pal = colorNumeric("viridis", colorado$soilInWaterpH),
-            values = colorado$soilInWaterpH, title = "Soil pH (H2O)")
 
 ```
 
--   Now, I wanted to focus on a specific state. So, in these graphs, I zoomed in on Colorado. We can now see the soil pH samples from this specific state, and we can even see the actual, in-depth, locations they were taken from.
+Here, we can see correlations among soil variables, linking things like elevation, temperature, and pH. There is a strong negative correlation in which the higher elevation soils are cooler. For the pH water vs pH CaCl₂ there is a strong positive correlation, but CaCl₂ values are consistently lower. For moisture vs temperature it is usually negative in drier sites (makes sense because warmer soils are drier), but may change depending on the site.
+
+## PCA of standardized environmental variables
 
 ```{r}
-# Filter for Colorado site (CPER)
-colorado_soil <- mags %>%
-  filter(siteID == "CPER")
 
-# Plot soil moisture distribution
-ggplot(colorado_soil, aes(x = soilMoisture)) +
-  geom_histogram(binwidth = 0.01, fill = "steelblue", color = "white") +
-  labs(title = "Soil Moisture Distribution at CPER (Colorado)",
-       x = "Soil Moisture (fraction)", y = "Frequency") +
-  theme_minimal()
+soil_mat <- soil_env %>%
+  select(soilTemp, soilMoisture, soilInWaterpH, soilInCaClpH, elevation) %>%
+  drop_na()
 
-# Plot soil temperature distribution
-ggplot(colorado_soil, aes(x = soilTemp)) +
-  geom_histogram(binwidth = 1, fill = "darkorange", color = "white") +
-  labs(title = "Soil Temperature Distribution at CPER (Colorado)",
-       x = "Soil Temperature (°C)", y = "Frequency") +
-  theme_minimal()
+# Run PCA
+pca <- prcomp(soil_mat, scale. = TRUE)
 
-# Plot soil pH (H2O)
-ggplot(colorado_soil, aes(x = soilInWaterpH)) +
-  geom_histogram(binwidth = 0.1, fill = "forestgreen", color = "white") +
-  labs(title = "Soil pH (H2O) Distribution at CPER (Colorado)",
-       x = "Soil pH (H2O)", y = "Frequency") +
-  theme_minimal()
+# 1. Scree plot (variance explained)
+plot(pca, type = "l", main = "Scree plot of PCA")
+
+# 2. Base R biplot
+biplot(pca, scale = 0, cex = 0.7)
+
+# 3. ggplot2 version (PC1 vs PC2 scores)
+pca_scores <- as.data.frame(pca$x)
+pca_scores$site_ID <- soil_env %>%
+  drop_na(soilTemp, soilMoisture, soilInWaterpH, soilInCaClpH, elevation) %>%
+  pull(site_ID)
+
+ggplot(pca_scores, aes(PC1, PC2, color = site_ID)) +
+  geom_point() +
+  labs(title = "PCA of soil variables", x = "PC1", y = "PC2") +
+  theme_bw()
 
 
 ```
 
--   Now, I wanted to see what the soil properties in the samples from Colorado are. There is a relative flux in the samples, I imagine it is impacted by specifically where the soil was found. For example, closer to a body of water, in the middle of a forest, or in a large field. The different environment will definitely play a role in the results of the soil characteristics.
+PC1 graphs often show the elevation–temperature gradient. PC2 can separate moisture and pH chemistry. The Scree plot shows how much variance each component explains. The base R biplot displays samples and variable loadings together, it is helpful for quick inspection.The ggplot2 scatterplot is a clean visualization of site clustering in PC1–PC2 space. This can be colored by site, sample type, or any grouping variable.
 
--   Now I want to see how this compares to the other states, so let's see the soil distributions of the other states in comparison.
-
-# Comparing the Soil Composition Across Some States
-
--   Now that I have seen the soil composition in Colorado, I wanted to see how it differs across some of the states.
+## Identify chemical outliers and extremes
 
 ```{r}
-# Example mapping of NEON site IDs to states
-site_states <- tibble(
-  siteID = c("CPER", "HARV", "SRER", "OSBS", "KONZ", "NIWO"),  # add more as needed
-  State  = c("Colorado", "Massachusetts", "Arizona", "Florida", "Kansas", "Colorado")
-)
+outliers <- soil_env %>%
+  mutate(ph_diff = soilInWaterpH - soilInCaClpH) %>%
+  mutate(is_extreme = ph_diff > quantile(ph_diff, 0.95, na.rm = TRUE) |
+                       ph_diff < quantile(ph_diff, 0.05, na.rm = TRUE) |
+                       soilInWaterpH < quantile(soilInWaterpH, 0.05, na.rm = TRUE) |
+                       soilInWaterpH > quantile(soilInWaterpH, 0.95, na.rm = TRUE))
 
-# Merge with your dataset
-mags_states <- mags %>%
-  left_join(site_states, by = "siteID")
-ggplot(mags_states, aes(x = State, y = soilMoisture, fill = State)) +
-  geom_boxplot() +
-  labs(title = "Soil Moisture Distribution Across States",
-       x = "State", y = "Soil Moisture (fraction)") +
-  theme_minimal()
-ggplot(mags_states, aes(x = State, y = soilTemp, fill = State)) +
-  geom_boxplot() +
-  labs(title = "Soil Temperature Distribution Across States",
-       x = "State", y = "Soil Temperature (°C)") +
-  theme_minimal()
+outliers %>%
+  filter(is_extreme) %>%
+  arrange(desc(ph_diff)) %>%
+  select(genomicsSampleID, site_ID, soilInWaterpH, soilInCaClpH, ph_diff, soilTemp, soilMoisture, elevation)
 
 ```
 
--   This graph shows the average soil temperture in the states of Arizona, Colorado, Florida, Kanasa, Massachusetts, and NA. Here, we can see that Arizona, Florida, and Kansas have very high average soil temperatures, while states like Massachusetts and Colorado have a much lower average. I expected this, given the climate change across these states.
-
--   I am really curious to see the results for the soil moisture and pH now, let's compare!
-
-```{r}
-# Example mapping of NEON site IDs to states
-site_states <- tibble(
-  siteID = c("CPER", "HARV", "SRER", "OSBS", "KONZ", "NIWO"),  # add more as needed
-  State  = c("Colorado", "Massachusetts", "Arizona", "Florida", "Kansas", "Colorado")
-)
-
-# Merge with your dataset
-mags_states <- mags %>%
-  left_join(site_states, by = "siteID")
-
-ggplot(mags_states, aes(x = State, y = soilInWaterpH, fill = State)) +
-  geom_boxplot() +
-  labs(title = "Soil pH (H2O) Distribution Across States",
-       x = "State", y = "Soil pH (H2O)") +
-  theme_minimal()
-
-```
-
--   Here, we see the distribution of soil pHs found in these respective states. Arizona has the highest while Massachusetts has the lowest. The other states vary, but stay within the middle zone of about 5.1 to 6.7.
-
-```{r}
-# Example mapping of NEON site IDs to states
-site_states <- tibble(
-  siteID = c("CPER", "HARV", "SRER", "OSBS", "KONZ", "NIWO"),  # add more as needed
-  State  = c("Colorado", "Massachusetts", "Arizona", "Florida", "Kansas", "Colorado")
-)
-
-# Merge with your dataset
-mags_states <- mags %>%
-  left_join(site_states, by = "siteID")
-ggplot(mags_states, aes(x = State, y = soilMoisture, fill = State)) +
-  geom_boxplot() +
-  labs(title = "Soil Moisture Distribution Across States",
-       x = "State", y = "Soil Moisture (fraction)") +
-  theme_minimal()
-
-
-
-```
-
--   This graph shows the soil moisture of the samples collected in some states, and wow, I am surprised by these results. Massachusetts has the higher soil moisture fraction, while Florida and Colorado were on the board with some outliers, they did not average much moisture. The NA, I think represents the other states, which has a very diverse amount of soil moisture.
-
-# Analysis of Microbial Activity
-
-```{r}
-library(tidyverse)
-
-# Example NEON siteID → State mapping
-site_states <- tibble(
-  siteID = c("CPER", "HARV", "SRER", "OSBS", "KONZ", "NIWO", "SCBI", "TALL", "JORN", "DSNY"),
-  State  = c("Colorado", "Massachusetts", "Arizona", "Florida", "Kansas", "Colorado",
-             "Virginia", "Alabama", "New Mexico", "Florida")
-)
-
-# Load dataset
-mags <- read_csv("../NEON_soilMAGs_soilChem.csv")
-
-# Merge state info
-mags_states <- mags %>%
-  left_join(site_states, by = "siteID")
-phylum_counts <- mags_states %>%
-  filter(!is.na(phylum)) %>%
-  group_by(State, phylum) %>%
-  summarise(count = n(), .groups = "drop")
-
-ggplot(phylum_counts, aes(x = phylum, y = count, fill = State)) +
-  geom_col(position = "dodge") +
-  labs(title = "Microbial Phyla Across States",
-       x = "Phylum", y = "Count") +
-  theme_minimal() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
-
-
-```
-
-# Itirate with co-pilot to create a comprehensive analysis of the category area.
-
-## 4. Add explanations for the different types of analyses. For example what is Shannon Diversity? The final report should be something you could give another student or person in your lab.
-
--   This report exis exploring the microbial community composition and diversity using metagenome-assembled genomes (MAGs) from NEON soil samples. Using this, we can try to understand how microbial communities vary across sites and environments.
-
-We covered:
-
--   **Taxonomic profiling** (relative abundances of phyla, classes, genera)
-
--   **Alpha diversity** (Shannon, Simpson, richness)
-
--   **Beta diversity** (Bray-Curtis dissimilarity)
-
--   **Ordination** (NMDS, PCA, PCoA)
-
--   **Environmental overlays** (soil chemistry, temperature, moisture)
-
-## 2. Alpha Diversity: Shannon Diversity
-
-### 🔎 What is Shannon Diversity?
-
--   
-
--   **Definition**: Shannon diversity (also called Shannon-Weiner or Shannon entropy) is a measure of community diversity that accounts for both **richness** (number of species) and **evenness** (how evenly individuals are distributed among species).
-
--   
-
--   **Formula**:\
-    \[ H' = - \\sum\_{i=1}\^{S} p_i \\ln(p_i) \]\
-    where (p_i) is the proportion of individuals belonging to species (i), and (S) is the total number of species.
-
--   
-
--   **Interpretation**:
-
-    -   
-
-    -   Higher values = more diverse communities (many species, evenly distributed).
-
-    -   
-
-    -   Lower values = less diverse communities (few species, or dominated by one species).
-
-    -   
-
--   
-
--   **Why it matters**: Shannon diversity is widely used in ecology because it balances richness and evenness, giving a nuanced view of community structure.
-
--   
-
-### 📊 Computing Shannon Diversity in R
-
-```         
-# Assume genus_matrix (site x genus abundance) is already created  # Shannon diversity shannon <- diversity(genus_matrix, index = "shannon")  # Simpson diversity simpson <- diversity(genus_matrix, index = "simpson")  # Species richness richness <- specnumber(genus_matrix)  # Combine into a dataframe alpha_div <- data.frame(   Site = rownames(genus_matrix),   Shannon = shannon,   Simpson = simpson,   Richness = richness )  # Plot Shannon diversity across sites ggplot(alpha_div, aes(x = Site, y = Shannon, fill = Site)) +   geom_bar(stat = "identity") +   labs(title = "Shannon Diversity Across NEON Sites",        y = "Shannon Index", x = "Site") +   theme_minimal() 
-```
-
-### 🧭 Explanation of Results
-
--   
-
--   Each bar represents the **Shannon diversity index** for a site.
-
--   
-
--   Sites with higher Shannon values have **more diverse microbial communities**.
-
--   
-
--   Comparing Shannon with **Simpson** and **Richness** helps distinguish whether diversity is driven by **species number** or **evenness**.
-
--   
-
--   For example:
-
-    -   
-
-    -   A site with high richness but low Shannon may have many species but dominated by a few.
-
-    -   
-
-    -   A site with moderate richness but high Shannon may have fewer species but more balanced abundances.
-
-    -   
-
--   
-
-## 3. Integration with Environmental Data
-
-We can now **overlay Shannon diversity with soil chemistry variables** (pH, moisture, temperature) to explore correlations.
-
-```         
-# Merge alpha diversity with environmental data alpha_env <- alpha_div %>%   left_join(locations, by = c("Site" = "siteID"))  # Plot Shannon diversity vs soil pH ggplot(alpha_env, aes(x = soilInWaterpH, y = Shannon, color = Site)) +   geom_point(size = 4) +   geom_smooth(method = "lm", se = FALSE) +   labs(title = "Relationship Between Soil pH and Shannon Diversity",        x = "Soil pH (H2O)", y = "Shannon Diversity") +   theme_minimal() 
-```
-
-### 🧪 Interpretation
-
--   
-
--   This scatterplot shows whether **soil pH** influences microbial diversity.
-
--   
-
--   A positive slope suggests higher pH supports more diverse communities; a negative slope suggests the opposite.
-
--   
-
--   Similar plots can be made for **soil moisture** and **temperature**.
-
--   
-
-## 🚀 Next Steps
-
--   
-
--   Extend to **beta diversity (Bray-Curtis)** to compare communities between sites.
-
--   
-
--   Use **ordination (NMDS/PCA)** with environmental vectors to visualize how soil chemistry drives community differences.
-
--   
-
--   Map **Shannon diversity geographically** (bubble size = Shannon index, color = pH) to integrate spatial and ecological perspectives.
-
--   
-
-✅ This section now explains **what Shannon diversity is**, **how to compute it**, and **how to interpret it** — making the report suitable for another student or lab member.
-
-Would you like me to **add the geographic overlay of Shannon diversity** (bubble size = Shannon index, color = soil pH) for Colorado or all NEON sites? That would tie together the diversity analysis with the mapping work we’ve already built.
-
-## 5. Push the final report to GitHub. Submit a link to your website (not your repository)
+This shows the samples with extreme water or CaCl₂ pH's, indicating if there are any outliers. For example, a large pH outliers can mean that there is some unusual organic matter. Extremely lower pH samples are most likley from organic-rich forest floors, while very high pHs are found in dry climates (ex. ONAQ).
